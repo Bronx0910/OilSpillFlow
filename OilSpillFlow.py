@@ -13,8 +13,8 @@ openmeteo = openmeteo_requests.Client(session = retry_session)
 # The order of variables in hourly or daily is important to assign them correctly below
 url = "https://marine-api.open-meteo.com/v1/marine"
 params = {
-	"latitude": 13.4088,
-	"longitude": 122.5615,
+	"latitude": 14.7167,
+	"longitude": 120.7533,
 	"hourly": ["wave_height", "wave_direction", "wind_wave_direction"]
 }
 responses = openmeteo.weather_api(url, params=params)
