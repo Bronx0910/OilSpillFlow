@@ -1,1 +1,2 @@
-Oil Spill Patterm prediction using Open Matoe
+# OilSpillFlow
+Oil spill pattern prediction using Open Mateo API
