@@ -1,47 +1,97 @@
 import openmeteo_requests
-
 import requests_cache
 import pandas as pd
 from retry_requests import retry
+import numpy as np
+import matplotlib.pyplot as plt
 
-# Setup the Open-Meteo API client with cache and retry on error
-cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
-retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
-openmeteo = openmeteo_requests.Client(session = retry_session)
 
-# Make sure all required weather variables are listed here
-# The order of variables in hourly or daily is important to assign them correctly below
+# Step 1: Initial Setup
+cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
+retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+openmeteo = openmeteo_requests.Client(session=retry_session)
+
+# Step 2: API Request and Data Extraction
 url = "https://marine-api.open-meteo.com/v1/marine"
 params = {
-	"latitude": 14.7167,
-	"longitude": 120.7533,
-	"hourly": ["wave_height", "wave_direction", "wind_wave_direction"]
+    "latitude": 13.4088,
+    "longitude": 122.5615,
+    "hourly": ["wave_height", "wave_direction", "wind_wave_direction"]
 }
 responses = openmeteo.weather_api(url, params=params)
-
-# Process first location. Add a for-loop for multiple locations or weather models
 response = responses[0]
-print(f"Coordinates {response.Latitude()}°N {response.Longitude()}°E")
-print(f"Elevation {response.Elevation()} m asl")
-print(f"Timezone {response.Timezone()} {response.TimezoneAbbreviation()}")
-print(f"Timezone difference to GMT+0 {response.UtcOffsetSeconds()} s")
 
-# Process hourly data. The order of variables needs to be the same as requested.
 hourly = response.Hourly()
 hourly_wave_height = hourly.Variables(0).ValuesAsNumpy()
 hourly_wave_direction = hourly.Variables(1).ValuesAsNumpy()
 hourly_wind_wave_direction = hourly.Variables(2).ValuesAsNumpy()
 
-hourly_data = {"date": pd.date_range(
-	start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
-	end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
-	freq = pd.Timedelta(seconds = hourly.Interval()),
-	inclusive = "left"
-)}
-hourly_data["wave_height"] = hourly_wave_height
-hourly_data["wave_direction"] = hourly_wave_direction
-hourly_data["wind_wave_direction"] = hourly_wind_wave_direction
+hourly_data = {
+    "date": pd.date_range(
+        start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+        freq=pd.Timedelta(seconds=hourly.Interval()),
+        inclusive="left"
+    ),
+    "wave_height": hourly_wave_height,
+    "wave_direction": hourly_wave_direction,
+    "wind_wave_direction": hourly_wind_wave_direction
+}
+hourly_dataframe = pd.DataFrame(data=hourly_data)
 
-hourly_dataframe = pd.DataFrame(data = hourly_data)
+# Step 3: Oil Spill Prediction
+initial_latitude = params["latitude"]
+initial_longitude = params["longitude"]
 
-print(hourly_dataframe)
+def predict_oil_spill(latitude, longitude, wave_dir, wind_wave_dir, wave_speed, time_step):
+    wave_dir_rad = np.radians(wave_dir)
+    lat_movement = np.sin(wave_dir_rad) * wave_speed * time_step
+    lon_movement = np.cos(wave_dir_rad) * wave_speed * time_step
+    return latitude + lat_movement, longitude + lon_movement
+
+predicted_positions = []
+current_lat, current_lon = initial_latitude, initial_longitude
+
+for i in range(len(hourly_dataframe)):
+    wave_dir = hourly_dataframe["wave_direction"].iloc[i]
+    wind_wave_dir = hourly_dataframe["wind_wave_direction"].iloc[i]
+    wave_speed = hourly_dataframe["wave_height"].iloc[i]
+    
+    current_lat, current_lon = predict_oil_spill(current_lat, current_lon, wave_dir, wind_wave_dir, wave_speed, time_step=1)
+    predicted_positions.append((current_lat, current_lon))
+
+predicted_latitudes, predicted_longitudes = zip(*predicted_positions)
+hourly_dataframe["predicted_latitude"] = predicted_latitudes
+hourly_dataframe["predicted_longitude"] = predicted_longitudes
+
+# Step 4: Visualization
+#print(hourly_dataframe)
+
+#to txt file
+#hourly_dataframe.to_csv('output.txt', sep='\t', index=False)
+
+# Visualization
+plt.figure(figsize=(10, 6))
+
+# Plot the predicted positions
+plt.plot(hourly_dataframe['predicted_longitude'], hourly_dataframe['predicted_latitude'], marker='o', linestyle='-', color='b', label='Predicted Oil Spill Path')
+
+# Annotate the starting point
+plt.scatter(hourly_dataframe['predicted_longitude'].iloc[0], hourly_dataframe['predicted_latitude'].iloc[0], color='g', label='Starting Point')
+plt.annotate('Start', (hourly_dataframe['predicted_longitude'].iloc[0], hourly_dataframe['predicted_latitude'].iloc[0]), textcoords="offset points", xytext=(0,10), ha='center')
+
+# Annotate the ending point
+plt.scatter(hourly_dataframe['predicted_longitude'].iloc[-1], hourly_dataframe['predicted_latitude'].iloc[-1], color='r', label='Ending Point')
+plt.annotate('End', (hourly_dataframe['predicted_longitude'].iloc[-1], hourly_dataframe['predicted_latitude'].iloc[-1]), textcoords="offset points", xytext=(0,-15), ha='center')
+
+# Add labels and title
+plt.xlabel('Longitude')
+plt.ylabel('Latitude')
+plt.title('Predicted Oil Spill Path')
+plt.legend()
+
+# Show grid
+plt.grid(True)
+
+# Show the plot
+plt.show()
