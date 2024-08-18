@@ -3,6 +3,7 @@ import requests_cache
 import pandas as pd
 from retry_requests import retry
 import numpy as np
+from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 
 
@@ -71,18 +72,33 @@ hourly_dataframe["predicted_longitude"] = predicted_longitudes
 #hourly_dataframe.to_csv('output.txt', sep='\t', index=False)
 
 # Visualization
-plt.figure(figsize=(10, 6))
+plt.figure(figsize=(12, 8))
+
+# Create a Basemap instance with Mercator projection
+m = Basemap(projection='merc', llcrnrlat=10, urcrnrlat=14,
+            llcrnrlon=119, urcrnrlon=123, resolution='i')
+
+# Draw map features
+m.drawcoastlines()
+m.drawcountries()
+m.drawmapboundary(fill_color='aqua')
+m.fillcontinents(color='lightgreen', lake_color='aqua')
+
+# Convert latitude and longitude to map projection coordinates
+x, y = m(hourly_dataframe['predicted_longitude'].values, hourly_dataframe['predicted_latitude'].values)
 
 # Plot the predicted positions
-plt.plot(hourly_dataframe['predicted_longitude'], hourly_dataframe['predicted_latitude'], marker='o', linestyle='-', color='b', label='Predicted Oil Spill Path')
+m.plot(x, y, marker='o', linestyle='-', color='b', label='Predicted Oil Spill Path')
 
 # Annotate the starting point
-plt.scatter(hourly_dataframe['predicted_longitude'].iloc[0], hourly_dataframe['predicted_latitude'].iloc[0], color='g', label='Starting Point')
-plt.annotate('Start', (hourly_dataframe['predicted_longitude'].iloc[0], hourly_dataframe['predicted_latitude'].iloc[0]), textcoords="offset points", xytext=(0,10), ha='center')
+start_x, start_y = m(hourly_dataframe['predicted_longitude'].iloc[0], hourly_dataframe['predicted_latitude'].iloc[0])
+m.scatter(start_x, start_y, color='g', label='Starting Point')
+plt.annotate('Start', (start_x, start_y), textcoords="offset points", xytext=(0,10), ha='center')
 
 # Annotate the ending point
-plt.scatter(hourly_dataframe['predicted_longitude'].iloc[-1], hourly_dataframe['predicted_latitude'].iloc[-1], color='r', label='Ending Point')
-plt.annotate('End', (hourly_dataframe['predicted_longitude'].iloc[-1], hourly_dataframe['predicted_latitude'].iloc[-1]), textcoords="offset points", xytext=(0,-15), ha='center')
+end_x, end_y = m(hourly_dataframe['predicted_longitude'].iloc[-1], hourly_dataframe['predicted_latitude'].iloc[-1])
+m.scatter(end_x, end_y, color='r', label='Ending Point')
+plt.annotate('End', (end_x, end_y), textcoords="offset points", xytext=(0,-15), ha='center')
 
 # Add labels and title
 plt.xlabel('Longitude')
